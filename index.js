@@ -1,165 +1,69 @@
-const express=require("express")
-const Collection=require("./mongo")
+const express = require("express");
+const bodyParser = require("body-parser");
+const { MongoClient, ObjectId, Logger } = require("mongodb");
+const http = require("http");
+const bcryptjs = require("bcryptjs");
+const { debugPort } = require("process");
+const jwt = require('jsonwebtoken');
+const jwtSecret =
+  "22c5b535d5a5d722849f9fc190edaeb418573ba6b7c228aebbbc412899fe748d439d2b";
 
-const app=express()
-const path=require("path")
-const jwt=require("jsonwebtoken")
-const cookieParser=require("cookie-parser")
-const bcryptjs=require("bcryptjs")
+const client = new MongoClient(
+  "mongodb+srv://mayuriningdalli:Shaila%4094@cluster0.xi9xhjp.mongodb.net/test"
+);
 
-app.use(express.json())
-app.use(cookieParser())
-app.use(express.urlencoded({extended:false}))
+const db = client.db(`test`);
 
+const app = express();
+app.use(bodyParser.json());
 
-const tempelatePath=path.join(__dirname,"../tempelates")
-const publicPath=path.join(__dirname,"../public")
+// // parse requests of content-type - application/x-www-form-urlencoded
+app.use(bodyParser.urlencoded({ extended: true }));
+const server = http.createServer(app);
 
-app.set('view engine','hbs')
-app.set("views",tempelatePath)
-app.use(express.static(publicPath))
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Authorization, Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
 
+async function compare(userPass, hashPass) {
+  const res = await bcryptjs.compareSync(userPass, hashPass);
 
-
-async function hashPass(password){
-
-    const res=await bcryptjs.hash(password,10)
-    return res
-
+  return res;
 }
-async function compare(userPass,hashPass){
-
-    const res=await bcryptjs.compare(userPass,hashPass)
-    return res
-
+async function hashPasswrd(userPass, dbPass) {
+  const res = await bcryptjs.hash(dbPass, 10);
+  return compare(userPass, res);
 }
 
+app.post("/login", async (req, res) => {
+  let email = req.body.email;
+  console.log(req.body);
+  const result = await db.collection("users").findOne({ email: email });
+  const passCheck = await hashPasswrd(req.body.password, result.password);
 
-
-app.get("/",(req,res)=>{
-
-    if(req.cookies.jwt){
-        const verify=jwt.verify(req.cookies.jwt,"helloandwelcometotechywebdevtutorialonauthhelloandwelcometotechywebdevtutorialonauth")
-    res.render("home",{name:verify.name})
-    }
-
-    else{
-        res.render("login")
-    }
-
-})
-app.get("/signup",(req,res)=>{
-    res.render("signup")
-})
-
-
-app.post("/signup",async(req,res)=>{
-    try{
-        const check=await Collection.findOne({name:req.body.name})
-
-        if(check){
-            res.send("user already exist")
-        }
-
-        else{
-            const token=jwt.sign({name:req.body.name},"helloandwelcometotechywebdevtutorialonauthhelloandwelcometotechywebdevtutorialonauth")
-
-            res.cookie("jwt",token,{
-                maxAge:600000,
-                httpOnly:true
-            })
-
-
-            const data={
-                name:req.body.name,
-                password:await hashPass(req.body.password),
-                token:token
+  if (result && passCheck) {
+    const maxAge = 3 * 60 * 60;
+          const token = jwt.sign(
+            { id: result._id, email:result.email },
+            jwtSecret,
+            {
+              expiresIn: maxAge, // 3hrs in sec
             }
+          );
+          res.cookie("jwt", token, {
+            httpOnly: true,
+            maxAge: maxAge * 1000, // 3hrs in ms
+          });
+    return res.status(200).json({ Sucess: true ,data: result, token : token });
+  } else {
+    return res.status(401).json({Sucess: false, message: "invalid user" });
+  }
+});
 
-            await Collection.insertMany([data])
+const port = process.env.PORT || 5000;
 
-            res.render("home",{name:req.body.name})
-
-        }
-
-    }
-    catch{
-
-        res.send("wrong details")
-
-    }
-})
-
-
-app.post("/login",async(req,res)=>{
-    try{
-      console.log(req.body.email, req.body.password);
-        const check=await Collection.findOne({email:req.body.email})
-        const passCheck=await compare(req.body.password,check.password)
-        console.log(check, passCheck);
-        if(check && passCheck){
-          
-            res.cookie("jwt",check.token,{
-                maxAge:600000,
-                httpOnly:true
-            })
-
-            res.render("home",{email:req.body.email})
-        }
-        
-        else{
-            
-            res.send("wrong details")
-
-        }
-
-    }
-    catch{
-
-        res.send("wrong details in catch")
-
-    }
-})
-
-
-
-
-
-
-
-app.listen(5000,()=>{
-    console.log("port connected")
-})
-
-// async function main(){
-//     /**
-//      * Connection URI. Update <username>, <password>, and <your-cluster-url> to reflect your cluster.
-//      * See https://docs.mongodb.com/ecosystem/drivers/node/ for more details
-//      */
-//     const uri = "mongodb+srv://mayuriningdalli:Shaila%4094@cluster0.xi9xhjp.mongodb.net/test";
- 
-
-//     const client = new MongoClient(uri);
- 
-//     try {
-//         // Connect to the MongoDB cluster
-//         await client.connect();
- 
-//         // Make the appropriate DB calls
-//         await  listDatabases(client);
- 
-//     } catch (e) {
-//         console.error(e);
-//     } finally {
-//         await client.close();
-//     }
-// }
-
-// main().catch(console.error);
-
-// async function listDatabases(client){
-//     databasesList = await client.db().admin().listDatabases();
- 
-//     console.log("Databases:");
-//     databasesList.databases.forEach(db => console.log(` - ${db.name}`));
-// };
+server.listen(port, () => {
+  console.log("Listening on port " + port);
+});
