@@ -5,7 +5,9 @@ const http = require("http");
 const bcryptjs = require("bcryptjs");
 const { debugPort } = require("process");
 const jwt = require('jsonwebtoken');
-const jwtSecret =
+
+
+const jwtSecret  =
   "22c5b535d5a5d722849f9fc190edaeb418573ba6b7c228aebbbc412899fe748d439d2b";
 
 const client = new MongoClient(
@@ -23,7 +25,8 @@ const server = http.createServer(app);
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Authorization, Origin, X-Requested-With, Content-Type, Accept');
+  res.header("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE");
+  res.header('Access-Control-Allow-Headers', 'Authorization, x-auth-token, Origin, X-Requested-With, Content-Type, Accept');
   next();
 });
 
@@ -37,9 +40,10 @@ async function hashPasswrd(userPass, dbPass) {
   return compare(userPass, res);
 }
 
+//login api generates jwt
 app.post("/login", async (req, res) => {
   let email = req.body.email;
-  console.log(req.body);
+
   const result = await db.collection("users").findOne({ email: email });
   const passCheck = await hashPasswrd(req.body.password, result.password);
 
@@ -61,13 +65,117 @@ app.post("/login", async (req, res) => {
     return res.status(401).json({Sucess: false, message: "invalid user" });
   }
 });
-
+//get api for user list
 app.get("/getuserdata", async (req, res) => {
-
-  const result = await db.collection("userdetails").find().toArray();
-  console.log(result);
-  return res.status(200).json({userDetails:result});
+let result ={};
+  var token = req.headers['x-auth-token'];
+ 
+  if (!token) return res.status(401).send({ auth: false, message: 'No token provided.' })
+  else{
+    jwt.verify(token,jwtSecret,async (err)=>{ 
+      if(err){  
+        res.status(403).send({message: err })
+    }else{
+      result = await db.collection("userdetails").find().toArray();
+   
+      return res.status(200).json({userDetails:result});
+     }
+    });
+    
+ }
+  
 });
+//post api for adding new user
+app.post("/adduser", async (req, res) => {
+
+    var token = req.headers['x-auth-token'];
+    if (!token) return res.status(401).send({ auth: false, message: 'No token provided.' })
+    else{
+      jwt.verify(token,jwtSecret,async (err)=>{ 
+        if(err){  
+          res.status(403).send({message: 'user invalid' })
+      }else{
+        result = await db.collection("userdetails").insertOne(req.body);
+     
+        return res.status(200).json({userDetails:result});
+        }
+       });
+      
+    }
+    
+  });
+//put api for update existing user
+app.put("/edituser/:id", async (req, res) => {
+   
+     let id = new ObjectId(req.params.id);
+
+    var token = req.headers['x-auth-token'];
+    if (!token) return res.status(401).send({ auth: false, message: 'No token provided.' })
+    else{
+      jwt.verify(token,jwtSecret,async (err)=>{ 
+        if(err){  
+          res.status(403).send({message: 'user invalid' })
+      }else{
+        result = await db.collection("userdetails").findOneAndUpdate ({ _id: id  },
+        { $set: req.body },
+        { returnDocument : true });
+      
+        return res.status(200).json({message:"user updated sucessfully."});
+        }
+       });
+     }
+  });
+
+//delete api to delete user
+app.delete("/delete/:id", async (req, res) => {
+ 
+   let id = new ObjectId(req.params.id);
+
+  var token = req.headers['x-auth-token'];
+  if (!token) return res.status(401).send({ auth: false, message: 'No token provided.' })
+  else{
+    jwt.verify(token,jwtSecret,async (err)=>{ 
+      if(err){  
+        res.status(403).send({message: 'user invalid' })
+    }else{
+      result = await db.collection("userdetails").deleteOne ({ _id: id  },
+      { $set: req.body },
+      { returnDocument : true });
+      
+      return res.status(200).json({message:"user deleted  sucessfully."});
+      }
+     });
+   }
+})
+// delete multiple record
+app.post("/deletemultiple", async (req, res) => {
+
+  var token = req.headers['x-auth-token'];
+  if (!token) return res.status(401).send({ auth: false, message: 'No token provided.' })
+  else{
+    jwt.verify(token,jwtSecret,async (err)=>{ 
+      if(err){  
+        res.status(403).send({message: 'user invalid' })
+    }else{
+      let ids =  [];
+      Object.values(req.body).map(element => {
+        ids.push(new ObjectId(element));
+      });
+      
+     
+
+      result = await db.collection("userdetails").deleteMany({_id: { $in: ids}});
+
+      return res.status(200).json({userDetails:result});
+      }
+     });
+    
+  }
+  
+});
+
+
+
 
 const port = process.env.PORT || 5000;
 
