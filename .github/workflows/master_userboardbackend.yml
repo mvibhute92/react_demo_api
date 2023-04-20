@@ -50,7 +50,7 @@ jobs:
         uses: azure/webapps-deploy@v2
         id: deploy-to-webapp
         with:
-          app-name: 'userBoardBackend'
+          app-name: 'userboardBackendDB'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_D98E4707F18040ACAAE2A211C6EC7C4B }}
           package: .
