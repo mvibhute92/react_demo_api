@@ -161,9 +161,6 @@ app.post("/deletemultiple", async (req, res) => {
       Object.values(req.body).map(element => {
         ids.push(new ObjectId(element));
       });
-      
-     
-
       result = await db.collection("userdetails").deleteMany({_id: { $in: ids}});
 
       return res.status(200).json({userDetails:result});
